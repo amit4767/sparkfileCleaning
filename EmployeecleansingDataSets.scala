@@ -1,4 +1,5 @@
 package com.sparkTutorial.rdd
+package com.sparkTutorial.rdd
 
 
 import org.apache.spark.sql._
@@ -45,26 +46,64 @@ object EmployeecleansingDataSets {
     def row(line: List[String]): Row = {
 
       Row(line(0).replaceAll("\"","").trim,
-        line(1).replaceAll("\"","").trim.toInt,
-        line(2).replaceAll("\"","").trim.toDouble,
-        line(3).replaceAll("\"","").trim.toInt,
+         if(line(1).replaceAll("\"","").trim != "") line(1).replaceAll("\"","").trim.toInt else 0,
+        if(line(2).replaceAll("\"","").trim != "") line(2).replaceAll("\"","").trim.toDouble else 0,
+        if(line(3).replaceAll("\"","").trim != "") line(3).replaceAll("\"","").trim.toInt else 0,
         line(4).replaceAll("\"","").trim)
 
     }
 
-    def filterRow(line: List[String])  = {
+
+
+    import scala.util.Try
+    def isInt(aString: String): Boolean = Try(aString.toInt).isSuccess
+    def isDouble(aString: String): Boolean = Try(aString.toDouble).isSuccess
+
+    def mapError(line: List[String]) ={
+
       if(line.size == 5) {
         try {
-          Row(line(0).trim, line(1).replaceAll("\"","").trim.toInt,
-            line(2).replaceAll("\"","").trim.toDouble,
-            line(3).replaceAll("\"","").trim.toInt, line(4).trim)
-          true
+
+          val x = if(!"".equals(line(1).replaceAll("\"","").trim)) {
+            if (isInt(line(1).replaceAll("\"", "").trim))
+              ""
+            else ",age"
+          }else ""
+
+
+          val y = if(!"".equals(line(2).replaceAll("\"","").trim)) {
+
+            if (isDouble(line(2).replaceAll("\"", "").trim)){
+               ""}
+            else if(x != "")
+                {
+                   ",salary"}
+             else { "salary" }
+          }else ""
+
+
+          val z = if(!"".equals(line(3).replaceAll("\"","").trim)) {
+            if (isInt(line(3).replaceAll("\"", "").trim))
+              ""
+            else if(y != "" || x!= "") ",benefits" else "benefits"
+          }else ""
+
+
+         if(x != "" || y!="" || z !="")
+          ("The datatypes of columns:["+x+y+z+"]" ,line)
+          else
+           ("" ,line)
+
         }catch {
-          case e: Exception => e.printStackTrace() ;false
+          case e: Exception => e.printStackTrace()
+            ("some unknown error" ,line)
         }
 
+
+
+
       }else {
-        false
+        ("The number of columns in the record doesn't match file header spec." , line)
       }
     }
 
@@ -72,15 +111,26 @@ object EmployeecleansingDataSets {
     //Cast all the columns to its type from the list
 
     val data2 = lines
-        .mapPartitionsWithIndex((index, element) => if (index == 0 ) element.drop(1) else element) // skip header
-        .map(_.split(",").to[List]).filter(filterRow)
+        .mapPartitionsWithIndex((index, element) => { if (index == 0  )  element.drop(2)  else element}) // skip header
+        .map(_.split(",").to[List]).map(mapError)
+
+
+    val errorrow  = data2.filter(x => x._1 !="")
+
+    errorrow.coalesce(1)
+      .saveAsTextFile("quar")
+    val goodrow  = data2.filter(x => x._1 =="")
+
+
+val  data = goodrow.map(x => x._2).map(row)
 
 
 
-      val data  = data2.map(row)
+     // val data  =
 
 
-    val dataFrame = spark.createDataFrame(data, schema)
+    val dataFrame = spark.createDataFrame( data, schema)
+
 
     dataFrame.printSchema()
 
